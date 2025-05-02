@@ -1,0 +1,1454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>FitEdge - Advanced Fitness Companion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#5D5CDE',
+                            dark: '#4a49b8',
+                            light: '#7e7de6'
+                        },
+                        secondary: {
+                            DEFAULT: '#24C16D',
+                            dark: '#1ea55c',
+                            light: '#3fd383'
+                        },
+                        background: {
+                            light: '#FFFFFF',
+                            dark: '#181818'
+                        },
+                        darkgray: '#2a2a2a',
+                        lightgray: '#f0f0f0'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            /* iOS overscroll fix */
+            -webkit-overflow-scrolling: touch;
+            /* Prevent text size adjustment after orientation changes in iOS */
+            -webkit-text-size-adjust: 100%;
+        }
+        
+        /* Add iOS safe area insets */
+        @supports (padding-top: env(safe-area-inset-top)) {
+            body {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+            
+            #bottom-nav {
+                padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+            }
+        }
+
+        .card {
+            background-color: white;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .dark .card {
+            background-color: #2a2a2a;
+        }
+
+        .workout-card {
+            transition: transform 0.3s ease;
+        }
+
+        .workout-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .chart-container {
+            height: 180px;
+            position: relative;
+        }
+
+        .vo2-chart {
+            position: relative;
+            height: 100%;
+            width: 100%;
+        }
+
+        .chart-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60%;
+            background: linear-gradient(to top right, rgba(93, 92, 222, 0.1), rgba(93, 92, 222, 0.3));
+            clip-path: polygon(0 100%, 10% 80%, 20% 90%, 30% 70%, 40% 80%, 50% 60%, 60% 65%, 70% 50%, 80% 60%, 90% 45%, 100% 50%, 100% 100%);
+        }
+
+        .chart-dots {
+            position: absolute;
+            height: 100%;
+            width: 100%;
+        }
+
+        .chart-dot {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #5D5CDE;
+            transform: translate(-50%, -50%);
+        }
+
+        .progress-ring {
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.3s ease;
+        }
+
+        .ar-overlay {
+            background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9IiMzMzMiLz48L3N2Zz4=');
+            position: relative;
+        }
+
+        /* Activity Animation */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .pulse-animation {
+            animation: pulse 2s infinite ease-in-out;
+        }
+
+        .dark {
+            color-scheme: dark;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-gray-900 dark:text-gray-100 min-h-screen">
+    <!-- Theme Detection -->
+    <script>
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        
+        // Listen for changes in color scheme preference
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // App state management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initial state
+            let currentScreen = 'login';
+            let currentWorkoutType = null;
+            let isWorkoutActive = false;
+            let workoutTimer = 0;
+            let workoutInterval = null;
+            let selectedPlan = null;
+
+            // Simulated user data
+            const userData = {
+                name: "Alex",
+                vo2max: 48.5,
+                lastWorkout: "10km Run",
+                weeklyGoal: 4,
+                completedWorkouts: 2,
+                friends: ["Jamie", "Taylor", "Jordan"],
+                upcomingWorkouts: [
+                    { type: "Run", title: "Tempo Run", time: "Tomorrow, 7:00 AM", duration: "40 min" },
+                    { type: "Strength", title: "Upper Body", time: "Wednesday, 6:30 PM", duration: "45 min" },
+                    { type: "Yoga", title: "Recovery", time: "Friday, 8:00 AM", duration: "30 min" }
+                ]
+            };
+
+            // Training plans data
+            const trainingPlans = [
+                { 
+                    id: 'run5k',
+                    title: 'Run Your First 5K', 
+                    level: 'Beginner',
+                    duration: '8 weeks',
+                    workoutsPerWeek: 3,
+                    description: 'Perfect for beginners looking to build endurance and complete their first 5K race.',
+                    image: 'run'
+                },
+                { 
+                    id: 'strength',
+                    title: 'Full Body Strength', 
+                    level: 'Intermediate',
+                    duration: '12 weeks',
+                    workoutsPerWeek: 4,
+                    description: 'Build functional strength with this comprehensive program focusing on all major muscle groups.',
+                    image: 'strength' 
+                },
+                { 
+                    id: 'halfmarathon',
+                    title: 'Half Marathon Prep', 
+                    level: 'Advanced',
+                    duration: '16 weeks',
+                    workoutsPerWeek: 5,
+                    description: 'Take your running to the next level with this challenging half marathon training plan.',
+                    image: 'run' 
+                },
+                { 
+                    id: 'hiit',
+                    title: 'HIIT Fat Burner', 
+                    level: 'All Levels',
+                    duration: '6 weeks',
+                    workoutsPerWeek: 4,
+                    description: 'High-intensity interval training designed to maximize calorie burn and improve fitness.',
+                    image: 'hiit' 
+                },
+                { 
+                    id: 'yoga',
+                    title: 'Yoga Flow Journey', 
+                    level: 'All Levels',
+                    duration: '8 weeks',
+                    workoutsPerWeek: 3,
+                    description: 'Improve flexibility, balance, and mental clarity with this progressive yoga program.',
+                    image: 'yoga' 
+                },
+            ];
+
+            // Navigation setup
+            window.showScreen = function(screenId) {
+                document.querySelectorAll('.screen').forEach(screen => {
+                    screen.classList.add('hidden');
+                });
+                document.getElementById(screenId).classList.remove('hidden');
+                currentScreen = screenId;
+
+                // Update active state in bottom nav
+                document.querySelectorAll('.nav-item').forEach(item => {
+                    item.classList.remove('text-primary', 'dark:text-primary');
+                    item.classList.add('text-gray-500', 'dark:text-gray-400');
+                });
+
+                // Map screen IDs to nav items
+                const navMapping = {
+                    'dashboard': 'nav-home',
+                    'workout': 'nav-workout',
+                    'training': 'nav-training',
+                    'social': 'nav-social',
+                    'profile': 'nav-profile'
+                };
+
+                if (navMapping[screenId]) {
+                    const activeNav = document.getElementById(navMapping[screenId]);
+                    activeNav.classList.remove('text-gray-500', 'dark:text-gray-400');
+                    activeNav.classList.add('text-primary', 'dark:text-primary');
+                }
+
+                // Special logic for certain screens
+                if (screenId === 'dashboard') {
+                    initDashboard();
+                } else if (screenId === 'workout-active') {
+                    startWorkout();
+                } else if (screenId === 'ar-experience') {
+                    // Initialize AR demo
+                    setTimeout(() => {
+                        document.getElementById('ar-loading').classList.add('hidden');
+                        document.getElementById('ar-content').classList.remove('hidden');
+                    }, 1500);
+                } else if (screenId === 'training-detail' && selectedPlan) {
+                    displayTrainingPlanDetail(selectedPlan);
+                }
+            }
+
+            // Initialize dashboard
+            function initDashboard() {
+                // Create VO2 Max chart dots
+                const chartDotsContainer = document.querySelector('.chart-dots');
+                chartDotsContainer.innerHTML = '';
+                
+                const values = [44.2, 45.1, 44.8, 45.5, 46.2, 47.0, 47.5, 48.1, 48.5];
+                const positions = [
+                    [10, 80], [20, 75], [30, 76], [40, 72], [50, 70], 
+                    [60, 68], [70, 65], [80, 62], [90, 60]
+                ];
+                
+                positions.forEach((pos, index) => {
+                    const dot = document.createElement('div');
+                    dot.className = 'chart-dot';
+                    dot.style.left = `${pos[0]}%`;
+                    dot.style.top = `${pos[1]}%`;
+                    
+                    // Add tooltip with value
+                    dot.setAttribute('title', values[index].toString());
+                    
+                    chartDotsContainer.appendChild(dot);
+                });
+
+                // Set latest VO2 Max value
+                document.getElementById('current-vo2max').textContent = userData.vo2max;
+            }
+
+            // Handle login
+            document.getElementById('login-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                document.getElementById('auth-overlay').classList.add('animate-fade-out');
+                setTimeout(() => {
+                    showScreen('dashboard');
+                    document.getElementById('auth-overlay').classList.add('hidden');
+                    document.getElementById('bottom-nav').classList.remove('hidden');
+                }, 400);
+            });
+
+            // Social login buttons
+            document.querySelectorAll('.social-login-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.getElementById('auth-overlay').classList.add('animate-fade-out');
+                    setTimeout(() => {
+                        showScreen('dashboard');
+                        document.getElementById('auth-overlay').classList.add('hidden');
+                        document.getElementById('bottom-nav').classList.remove('hidden');
+                    }, 400);
+                });
+            });
+
+            // Bottom navigation
+            document.getElementById('nav-home').addEventListener('click', () => showScreen('dashboard'));
+            document.getElementById('nav-workout').addEventListener('click', () => showScreen('workout'));
+            document.getElementById('nav-training').addEventListener('click', () => showScreen('training'));
+            document.getElementById('nav-social').addEventListener('click', () => showScreen('social'));
+            document.getElementById('nav-profile').addEventListener('click', () => showScreen('profile'));
+
+            // Workout type selection
+            document.querySelectorAll('.workout-type').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    currentWorkoutType = this.getAttribute('data-type');
+                    document.getElementById('selected-workout-type').textContent = 
+                        currentWorkoutType.charAt(0).toUpperCase() + currentWorkoutType.slice(1);
+                    showScreen('workout-options');
+                });
+            });
+
+            // Start workout button
+            document.getElementById('start-workout-btn').addEventListener('click', () => {
+                showScreen('workout-active');
+            });
+
+            // Workout functions
+            function startWorkout() {
+                isWorkoutActive = true;
+                workoutTimer = 0;
+                document.getElementById('workout-time').textContent = formatTime(workoutTimer);
+                document.getElementById('current-activity-title').textContent = 
+                    currentWorkoutType.charAt(0).toUpperCase() + currentWorkoutType.slice(1);
+                document.querySelector('.activity-animation').classList.add('pulse-animation');
+                
+                // Start timer
+                workoutInterval = setInterval(() => {
+                    workoutTimer++;
+                    document.getElementById('workout-time').textContent = formatTime(workoutTimer);
+                    
+                    // Update simulated stats
+                    if (workoutTimer % 5 === 0) {
+                        updateWorkoutStats();
+                    }
+                }, 1000);
+            }
+
+            function stopWorkout() {
+                isWorkoutActive = false;
+                clearInterval(workoutInterval);
+                document.querySelector('.activity-animation').classList.remove('pulse-animation');
+                showScreen('workout-summary');
+                
+                // Populate summary with simulated data
+                document.getElementById('summary-duration').textContent = formatTime(workoutTimer);
+                document.getElementById('summary-distance').textContent = 
+                    (currentWorkoutType === 'run' || currentWorkoutType === 'cycle') 
+                        ? ((workoutTimer / 60) * 0.18).toFixed(2) + ' km' 
+                        : 'N/A';
+                document.getElementById('summary-calories').textContent = Math.floor(workoutTimer * 0.15) + ' kcal';
+                document.getElementById('summary-type').textContent = 
+                    currentWorkoutType.charAt(0).toUpperCase() + currentWorkoutType.slice(1);
+            }
+
+            function updateWorkoutStats() {
+                // Simulate changing workout stats
+                const heartRate = 130 + Math.floor(Math.random() * 20);
+                document.getElementById('heart-rate').textContent = heartRate;
+                
+                if (currentWorkoutType === 'run' || currentWorkoutType === 'cycle') {
+                    const distance = ((workoutTimer / 60) * 0.18).toFixed(2);
+                    document.getElementById('distance').textContent = distance + ' km';
+                    
+                    const pace = (workoutTimer / distance / 60).toFixed(2);
+                    document.getElementById('pace').textContent = pace + ' min/km';
+                }
+                
+                const calories = Math.floor(workoutTimer * 0.15);
+                document.getElementById('calories').textContent = calories + ' kcal';
+            }
+
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            // Workout control buttons
+            document.getElementById('pause-workout-btn').addEventListener('click', function() {
+                if (isWorkoutActive) {
+                    isWorkoutActive = false;
+                    clearInterval(workoutInterval);
+                    this.textContent = 'Resume';
+                    document.querySelector('.activity-animation').classList.remove('pulse-animation');
+                } else {
+                    isWorkoutActive = true;
+                    workoutInterval = setInterval(() => {
+                        workoutTimer++;
+                        document.getElementById('workout-time').textContent = formatTime(workoutTimer);
+                        if (workoutTimer % 5 === 0) {
+                            updateWorkoutStats();
+                        }
+                    }, 1000);
+                    this.textContent = 'Pause';
+                    document.querySelector('.activity-animation').classList.add('pulse-animation');
+                }
+            });
+
+            document.getElementById('stop-workout-btn').addEventListener('click', stopWorkout);
+            document.getElementById('finish-btn').addEventListener('click', () => showScreen('dashboard'));
+            document.getElementById('ar-guide-btn').addEventListener('click', () => showScreen('ar-experience'));
+            document.getElementById('close-ar-btn').addEventListener('click', () => showScreen('workout-active'));
+
+            // Training plans
+            function renderTrainingPlans() {
+                const container = document.getElementById('training-plans-container');
+                container.innerHTML = '';
+                
+                trainingPlans.forEach(plan => {
+                    const card = document.createElement('div');
+                    card.className = 'card p-4 mb-4 workout-card';
+                    card.innerHTML = `
+                        <div class="flex">
+                            <div class="rounded-lg bg-primary-light dark:bg-primary-dark w-14 h-14 flex items-center justify-center flex-shrink-0">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                        d="${plan.image === 'run' ? 'M13 10V3L4 14h7v7l9-11h-7z' : 
+                                           plan.image === 'strength' ? 'M3 6l3 4.5L12 3l3 4.5L21 3v18l-9-7.5L3 21V6z' :
+                                           plan.image === 'yoga' ? 'M4 20h16M4 4h16M9 12h6M7 8h10M7 16h10' :
+                                           'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'}">
+                                    </path>
+                                </svg>
+                            </div>
+                            <div class="ml-4 flex-1">
+                                <h3 class="font-semibold text-lg">${plan.title}</h3>
+                                <div class="flex items-center mt-1 text-sm">
+                                    <span class="inline-block px-2 py-0.5 bg-gray-200 dark:bg-darkgray rounded-full mr-2">${plan.level}</span>
+                                    <span class="text-gray-600 dark:text-gray-400">${plan.duration} • ${plan.workoutsPerWeek}x/week</span>
+                                </div>
+                                <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">${plan.description}</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    card.addEventListener('click', () => {
+                        selectedPlan = plan;
+                        showScreen('training-detail');
+                    });
+                    
+                    container.appendChild(card);
+                });
+            }
+
+            function displayTrainingPlanDetail(plan) {
+                document.getElementById('plan-title').textContent = plan.title;
+                document.getElementById('plan-subtitle').textContent = `${plan.level} • ${plan.duration} • ${plan.workoutsPerWeek}x/week`;
+                document.getElementById('plan-description').textContent = plan.description;
+            }
+
+            // Initialize training plans
+            renderTrainingPlans();
+
+            // Plan detail actions
+            document.getElementById('start-plan-btn').addEventListener('click', function() {
+                this.classList.add('bg-green-500');
+                this.textContent = "Plan Started!";
+                
+                setTimeout(() => {
+                    showScreen('training');
+                    this.classList.remove('bg-green-500');
+                    this.textContent = "Start This Plan";
+                }, 1500);
+            });
+            
+            document.getElementById('back-to-plans-btn').addEventListener('click', () => showScreen('training'));
+            
+            // Quick start dashboard buttons
+            document.getElementById('quick-run-btn').addEventListener('click', function() {
+                currentWorkoutType = 'run';
+                showScreen('workout-options');
+                document.getElementById('selected-workout-type').textContent = 'Run';
+            });
+
+            // Initialize the app with the login screen
+            showScreen('login');
+        });
+    </script>
+
+    <!-- Authentication Screen -->
+    <div id="auth-overlay" class="fixed inset-0 z-50 bg-background-light dark:bg-background-dark flex flex-col justify-center items-center p-6">
+        <div class="w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="mx-auto w-20 h-20 rounded-2xl bg-primary flex items-center justify-center mb-4">
+                    <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                        </path>
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-bold">FitEdge</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-2">Your Advanced Fitness Companion</p>
+            </div>
+
+            <div class="space-y-4">
+                <button class="social-login-btn w-full flex items-center justify-center py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150">
+                    <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm6.36 14.83c-1.43-1.74-4.9-2.33-6.36-2.33s-4.93.59-6.36 2.33C4.62 15.49 4 13.82 4 12c0-4.41 3.59-8 8-8s8 3.59 8 8c0 1.82-.62 3.49-1.64 4.83zM12 6c-1.94 0-3.5 1.56-3.5 3.5S10.06 13 12 13s3.5-1.56 3.5-3.5S13.94 6 12 6z"></path>
+                    </svg>
+                    Continue with Apple
+                </button>
+                <button class="social-login-btn w-full flex items-center justify-center py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150">
+                    <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032 s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2 C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"></path>
+                    </svg>
+                    Continue with Google
+                </button>
+                <button class="social-login-btn w-full flex items-center justify-center py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150">
+                    <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M20.9,2H3.1A1.1,1.1,0,0,0,2,3.1V20.9A1.1,1.1,0,0,0,3.1,22h9.58V14.25h-2.6v-3h2.6V9a3.64,3.64,0,0,1,3.88-4,20.26,20.26,0,0,1,2.33.12v2.7H17.3c-1.26,0-1.5.6-1.5,1.47v1.93h3l-.39,3H15.8V22h5.1A1.1,1.1,0,0,0,22,20.9V3.1A1.1,1.1,0,0,0,20.9,2Z"></path>
+                    </svg>
+                    Continue with Facebook
+                </button>
+            </div>
+
+            <div class="mt-6">
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center">
+                        <div class="w-full border-t border-gray-300 dark:border-gray-700"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm">
+                        <span class="px-2 bg-background-light dark:bg-background-dark text-gray-500">Or continue with email</span>
+                    </div>
+                </div>
+
+                <form id="login-form" class="mt-6 space-y-4">
+                    <div>
+                        <label for="email" class="block text-sm font-medium mb-1">Email</label>
+                        <input type="email" id="email" name="email" required 
+                               class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray focus:outline-none focus:ring-2 focus:ring-primary text-base" 
+                               placeholder="you@example.com">
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium mb-1">Password</label>
+                        <input type="password" id="password" name="password" required 
+                               class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray focus:outline-none focus:ring-2 focus:ring-primary text-base" 
+                               placeholder="••••••••">
+                    </div>
+                    <div>
+                        <button type="submit" class="w-full py-3 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition duration-150 flex items-center justify-center">
+                            Sign In
+                        </button>
+                    </div>
+                </form>
+
+                <div class="mt-6 text-center text-sm">
+                    <span class="text-gray-600 dark:text-gray-400">Don't have an account?</span>
+                    <a href="#" class="ml-1 font-medium text-primary hover:text-primary-dark">Sign Up</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard Screen -->
+    <div id="dashboard" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h1 class="text-2xl font-bold">Dashboard</h1>
+                    <p class="text-gray-600 dark:text-gray-400">Welcome back, Alex</p>
+                </div>
+                <div class="relative">
+                    <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white font-medium">A</div>
+                </div>
+            </div>
+
+            <!-- Weekly Progress -->
+            <div class="card p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold">Weekly Progress</h2>
+                    <span class="text-sm text-primary">2/4 workouts</span>
+                </div>
+                <div class="h-3 bg-gray-200 dark:bg-darkgray rounded-full overflow-hidden">
+                    <div class="h-full bg-primary rounded-full" style="width: 50%"></div>
+                </div>
+                <div class="flex justify-between mt-3">
+                    <div class="flex space-x-2 pt-2">
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center bg-primary text-white text-xs">✓</div>
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center bg-primary text-white text-xs">✓</div>
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center bg-gray-200 dark:bg-darkgray text-gray-500 dark:text-gray-400 text-xs">3</div>
+                        <div class="w-6 h-6 rounded-full flex items-center justify-center bg-gray-200 dark:bg-darkgray text-gray-500 dark:text-gray-400 text-xs">4</div>
+                    </div>
+                    <button id="quick-run-btn" class="bg-primary hover:bg-primary-dark text-white font-medium px-4 py-2 rounded-lg text-sm">Quick Run</button>
+                </div>
+            </div>
+
+            <!-- VO2 Max -->
+            <div class="card p-4 mb-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-semibold">VO₂ Max</h2>
+                    <div class="flex items-center bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full px-2 py-0.5 text-xs">
+                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
+                        </svg>
+                        <span>+0.4</span>
+                    </div>
+                </div>
+                <div class="flex items-center mt-1">
+                    <span id="current-vo2max" class="text-2xl font-bold">48.5</span>
+                    <span class="ml-1 text-gray-600 dark:text-gray-400">ml/kg/min</span>
+                </div>
+                <div class="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                    Above average for your age group
+                </div>
+                
+                <div class="chart-container mt-4">
+                    <div class="vo2-chart">
+                        <div class="chart-line"></div>
+                        <div class="chart-dots"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <span>4 weeks ago</span>
+                        <span>2 weeks ago</span>
+                        <span>Current</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <h2 class="font-semibold mt-6 mb-3">Recent Activity</h2>
+            <div class="card p-4 mb-4">
+                <div class="flex items-center">
+                    <div class="rounded-lg bg-secondary-light dark:bg-secondary-dark w-12 h-12 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="font-medium">10km Run</h3>
+                        <div class="flex items-center mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            <span>Yesterday • 54:21</span>
+                            <span class="mx-2">•</span>
+                            <span>5:26/km</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upcoming Workouts -->
+            <h2 class="font-semibold mt-6 mb-3">Upcoming Workouts</h2>
+            <div class="card p-4 mb-4">
+                <div class="flex items-center">
+                    <div class="rounded-lg bg-primary-light dark:bg-primary-dark w-12 h-12 flex items-center justify-center flex-shrink-0">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <div class="ml-4 flex-1">
+                        <h3 class="font-medium">Tempo Run</h3>
+                        <div class="flex items-center mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            <span>Tomorrow, 7:00 AM</span>
+                            <span class="mx-2">•</span>
+                            <span>40 min</span>
+                        </div>
+                    </div>
+                    <button class="bg-gray-200 hover:bg-gray-300 dark:bg-darkgray dark:hover:bg-gray-700 rounded-full p-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workout Screen -->
+    <div id="workout" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">Start Workout</h1>
+                <p class="text-gray-600 dark:text-gray-400">Choose your activity</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="run">
+                    <div class="rounded-full bg-primary-light dark:bg-primary-dark w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">Run</span>
+                </div>
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="cycle">
+                    <div class="rounded-full bg-secondary-light dark:bg-secondary-dark w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M16 4v4l-4 4-4-4v-4M4 16l4-4M8 20v-4l4-4 4 4v4M16 16l4-4"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">Cycle</span>
+                </div>
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="strength">
+                    <div class="rounded-full bg-green-500 dark:bg-green-600 w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M3 6l3 4.5L12 3l3 4.5L21 3v18l-9-7.5L3 21V6z"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">Strength</span>
+                </div>
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="yoga">
+                    <div class="rounded-full bg-yellow-500 dark:bg-yellow-600 w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M4 20h16M4 4h16M9 12h6M7 8h10M7 16h10"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">Yoga</span>
+                </div>
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="hiit">
+                    <div class="rounded-full bg-red-500 dark:bg-red-600 w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">HIIT</span>
+                </div>
+                <div class="workout-type card p-5 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition duration-150" data-type="walk">
+                    <div class="rounded-full bg-blue-500 dark:bg-blue-600 w-14 h-14 flex items-center justify-center mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path>
+                        </svg>
+                    </div>
+                    <span class="font-medium text-lg">Walk</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workout Options Screen -->
+    <div id="workout-options" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="flex items-center mb-6">
+                <button class="mr-2 p-2 bg-gray-200 dark:bg-darkgray rounded-full" onclick="showScreen('workout')">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </button>
+                <div>
+                    <h1 class="text-2xl font-bold"><span id="selected-workout-type">Run</span> Options</h1>
+                    <p class="text-gray-600 dark:text-gray-400">Customize your workout</p>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-4">
+                <h2 class="font-semibold mb-3">Route Options</h2>
+                <div class="bg-gray-100 dark:bg-darkgray rounded-xl h-40 flex items-center justify-center">
+                    <div class="text-center">
+                        <svg class="w-10 h-10 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path>
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Choose from recommended routes</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-4">
+                <h2 class="font-semibold mb-3">Workout Goal</h2>
+                <div class="flex space-x-2 mb-3">
+                    <button class="flex-1 py-2 rounded-lg bg-primary text-white font-medium">Distance</button>
+                    <button class="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-darkgray text-gray-700 dark:text-gray-300 font-medium">Time</button>
+                    <button class="flex-1 py-2 rounded-lg bg-gray-200 dark:bg-darkgray text-gray-700 dark:text-gray-300 font-medium">Calories</button>
+                </div>
+                <div class="flex items-center">
+                    <input type="number" value="5.0" min="0.1" step="0.1" 
+                           class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-darkgray focus:outline-none focus:ring-2 focus:ring-primary text-base">
+                    <span class="ml-3 text-gray-600 dark:text-gray-400 font-medium">km</span>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-6">
+                <h2 class="font-semibold mb-3">Audio Coaching</h2>
+                <div class="flex items-center justify-between">
+                    <span>Voice feedback</span>
+                    <div class="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full bg-primary">
+                        <label for="toggle" class="absolute left-0 w-6 h-6 mb-2 bg-white rounded-full transition-transform duration-100 ease-in-out transform translate-x-6 cursor-pointer"></label>
+                        <input type="checkbox" id="toggle" name="toggle" class="w-full h-full appearance-none focus:outline-none cursor-pointer" checked>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mt-3">
+                    <span>Announce splits</span>
+                    <div class="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full bg-primary">
+                        <label for="toggle2" class="absolute left-0 w-6 h-6 mb-2 bg-white rounded-full transition-transform duration-100 ease-in-out transform translate-x-6 cursor-pointer"></label>
+                        <input type="checkbox" id="toggle2" name="toggle2" class="w-full h-full appearance-none focus:outline-none cursor-pointer" checked>
+                    </div>
+                </div>
+            </div>
+
+            <button id="start-workout-btn" class="w-full py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg transition duration-150 text-lg">
+                Start Workout
+            </button>
+        </div>
+    </div>
+
+    <!-- Active Workout Screen -->
+    <div id="workout-active" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4 h-full flex flex-col">
+            <div class="mb-4">
+                <h1 id="current-activity-title" class="text-2xl font-bold">Run</h1>
+                <p class="text-gray-600 dark:text-gray-400">Workout in progress</p>
+            </div>
+
+            <!-- Active Workout Display -->
+            <div class="flex-grow flex flex-col">
+                <!-- Time Display -->
+                <div class="card p-6 mb-4 text-center">
+                    <div class="text-5xl font-bold" id="workout-time">00:00</div>
+                    <p class="text-gray-600 dark:text-gray-400 mt-2">Duration</p>
+                </div>
+
+                <!-- Workout Stats -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="card p-4">
+                        <div class="text-gray-600 dark:text-gray-400 text-sm mb-1">Heart Rate</div>
+                        <div class="text-2xl font-bold" id="heart-rate">132</div>
+                        <div class="text-primary text-xs">bpm</div>
+                    </div>
+                    <div class="card p-4">
+                        <div class="text-gray-600 dark:text-gray-400 text-sm mb-1">Distance</div>
+                        <div class="text-2xl font-bold" id="distance">0.00 km</div>
+                        <div class="text-primary text-xs">total</div>
+                    </div>
+                    <div class="card p-4">
+                        <div class="text-gray-600 dark:text-gray-400 text-sm mb-1">Pace</div>
+                        <div class="text-2xl font-bold" id="pace">0.00 min/km</div>
+                        <div class="text-primary text-xs">current</div>
+                    </div>
+                    <div class="card p-4">
+                        <div class="text-gray-600 dark:text-gray-400 text-sm mb-1">Calories</div>
+                        <div class="text-2xl font-bold" id="calories">0 kcal</div>
+                        <div class="text-primary text-xs">burned</div>
+                    </div>
+                </div>
+
+                <!-- Activity Visualization -->
+                <div class="card p-4 mb-6 flex-grow">
+                    <div class="h-full flex items-center justify-center">
+                        <div class="activity-animation w-32 h-32 rounded-full bg-primary-light dark:bg-primary-dark flex items-center justify-center">
+                            <svg class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Workout Controls -->
+                <div class="flex justify-between mb-2">
+                    <button id="ar-guide-btn" class="flex-1 mr-4 py-3 bg-secondary hover:bg-secondary-dark text-white font-medium rounded-lg transition duration-150 flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                  d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        AR Guide
+                    </button>
+                    <button id="pause-workout-btn" class="flex-1 py-3 bg-gray-200 dark:bg-darkgray hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-medium rounded-lg transition duration-150">
+                        Pause
+                    </button>
+                </div>
+                <button id="stop-workout-btn" class="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-medium rounded-lg transition duration-150">
+                    Stop Workout
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AR Experience Screen -->
+    <div id="ar-experience" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl h-full flex flex-col">
+            <!-- AR View -->
+            <div class="ar-overlay flex-grow flex flex-col">
+                <!-- AR Loading -->
+                <div id="ar-loading" class="h-full flex items-center justify-center">
+                    <div class="text-center text-white p-6">
+                        <div class="mx-auto w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p class="text-xl font-bold">Initializing AR Guide</p>
+                        <p class="mt-2 opacity-80">Preparing augmented experience...</p>
+                    </div>
+                </div>
+                
+                <!-- AR Content -->
+                <div id="ar-content" class="hidden h-full flex flex-col justify-between p-4">
+                    <!-- AR Overlay Top -->
+                    <div class="bg-black bg-opacity-50 rounded-lg p-3 self-start">
+                        <div class="text-white font-bold">Current Pace</div>
+                        <div class="text-xl text-white">5:24 <span class="text-sm">min/km</span></div>
+                    </div>
+                    
+                    <!-- AR Guidance Element -->
+                    <div class="flex-grow flex items-center justify-center">
+                        <div class="bg-white bg-opacity-20 backdrop-blur-sm border border-white border-opacity-30 rounded-full w-20 h-20 flex items-center justify-center pulse-animation">
+                            <div class="text-white text-center">
+                                <div class="text-sm">Target</div>
+                                <div class="font-bold">5:20</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AR Stats Bar -->
+                    <div class="bg-black bg-opacity-50 rounded-lg p-3">
+                        <div class="flex justify-between text-white">
+                            <div class="text-center">
+                                <div class="text-xs opacity-80">Heart Rate</div>
+                                <div class="font-bold">148 bpm</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-xs opacity-80">Distance</div>
+                                <div class="font-bold">2.4 km</div>
+                            </div>
+                            <div class="text-center">
+                                <div class="text-xs opacity-80">Duration</div>
+                                <div class="font-bold">12:48</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AR Controls -->
+            <div class="p-4">
+                <button id="close-ar-btn" class="w-full py-3 bg-white text-gray-800 font-medium rounded-lg">
+                    Exit AR Mode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workout Summary Screen -->
+    <div id="workout-summary" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">Workout Complete</h1>
+                <p class="text-gray-600 dark:text-gray-400">Great job!</p>
+            </div>
+
+            <div class="card p-6 mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-lg"><span id="summary-type">Run</span> Summary</h2>
+                    <div class="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 rounded-full px-3 py-1 text-sm font-medium">
+                        Complete
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-gray-600 dark:text-gray-400 text-sm">Duration</div>
+                        <div class="text-2xl font-bold" id="summary-duration">00:00</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 dark:text-gray-400 text-sm">Distance</div>
+                        <div class="text-2xl font-bold" id="summary-distance">0.00 km</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 dark:text-gray-400 text-sm">Avg. Pace</div>
+                        <div class="text-2xl font-bold">5:24 min/km</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-600 dark:text-gray-400 text-sm">Calories</div>
+                        <div class="text-2xl font-bold" id="summary-calories">0 kcal</div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <h3 class="font-medium mb-3">VO₂ Max Impact</h3>
+                    <div class="flex items-center">
+                        <div class="relative w-16 h-16 mr-4">
+                            <svg class="w-16 h-16 progress-ring">
+                                <circle class="progress-ring__circle" stroke="#e5e7eb" stroke-width="4" fill="transparent" r="26" cx="32" cy="32"/>
+                                <circle class="progress-ring__circle" stroke="#5D5CDE" stroke-width="4" fill="transparent" r="26" cx="32" cy="32" 
+                                        stroke-dasharray="163.36" stroke-dashoffset="57.18"/>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center text-sm font-bold">
+                                +0.2
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-sm">This workout is estimated to improve your VO₂ Max by 0.2 points.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-between">
+                <button class="flex-1 mr-2 py-3 bg-gray-200 dark:bg-darkgray text-gray-800 dark:text-white font-medium rounded-lg transition duration-150">
+                    Share
+                </button>
+                <button id="finish-btn" class="flex-1 ml-2 py-3 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition duration-150">
+                    Finish
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Plans Screen -->
+    <div id="training" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold">Training Plans</h1>
+                <p class="text-gray-600 dark:text-gray-400">Personalized programs based on your goals</p>
+            </div>
+
+            <div id="training-plans-container">
+                <!-- Training plans will be populated here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Training Plan Detail Screen -->
+    <div id="training-detail" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="flex items-center mb-6">
+                <button id="back-to-plans-btn" class="mr-2 p-2 bg-gray-200 dark:bg-darkgray rounded-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                    </svg>
+                </button>
+                <div>
+                    <h1 id="plan-title" class="text-2xl font-bold">Run Your First 5K</h1>
+                    <p id="plan-subtitle" class="text-gray-600 dark:text-gray-400">Beginner • 8 weeks • 3x/week</p>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-6">
+                <div class="bg-gray-100 dark:bg-darkgray rounded-xl h-40 flex items-center justify-center mb-4">
+                    <svg class="w-16 h-16 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                            d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+                <p id="plan-description" class="text-gray-700 dark:text-gray-300">
+                    Perfect for beginners looking to build endurance and complete their first 5K race.
+                </p>
+            </div>
+
+            <div class="card p-4 mb-6">
+                <h2 class="font-semibold mb-3">Weekly Schedule</h2>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-gray-100 dark:bg-darkgray rounded-lg">
+                        <div>
+                            <div class="font-medium">Day 1: Easy Run</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">20 minutes • 2 km</div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-100 dark:bg-darkgray rounded-lg">
+                        <div>
+                            <div class="font-medium">Day 3: Interval Training</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">25 minutes • 2.5 km</div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-100 dark:bg-darkgray rounded-lg">
+                        <div>
+                            <div class="font-medium">Day 5: Long Run</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">30 minutes • 3 km</div>
+                        </div>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-6">
+                <h2 class="font-semibold mb-3">What You'll Achieve</h2>
+                <ul class="space-y-2">
+                    <li class="flex items-center">
+                        <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Run 5K continuously</span>
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Improve cardiovascular fitness</span>
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Establish consistent running habit</span>
+                    </li>
+                    <li class="flex items-center">
+                        <svg class="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Estimated VO₂ Max increase: +2.5 points</span>
+                    </li>
+                </ul>
+            </div>
+
+            <button id="start-plan-btn" class="w-full py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg transition duration-150 text-lg">
+                Start This Plan
+            </button>
+        </div>
+    </div>
+
+    <!-- Social Feed Screen -->
+    <div id="social" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold">Activity Feed</h1>
+                <button class="p-2 bg-gray-200 dark:bg-darkgray rounded-full">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                              d="M12 4v16m8-8H4"></path>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Friends' Activities -->
+            <div class="card p-4 mb-4">
+                <div class="flex items-start">
+                    <div class="rounded-full bg-blue-500 w-10 h-10 flex items-center justify-center text-white font-medium flex-shrink-0">
+                        J
+                    </div>
+                    <div class="ml-3 flex-1">
+                        <div class="flex justify-between">
+                            <h3 class="font-medium">Jamie</h3>
+                            <span class="text-sm text-gray-600 dark:text-gray-400">2h ago</span>
+                        </div>
+                        <p class="text-gray-700 dark:text-gray-300 mt-1">Completed a 12km Run</p>
+                        
+                        <div class="mt-2 p-3 bg-gray-100 dark:bg-darkgray rounded-lg">
+                            <div class="flex justify-between">
+                                <div class="text-sm">
+                                    <div class="text-gray-600 dark:text-gray-400">Distance</div>
+                                    <div class="font-medium">12.03 km</div>
+                                </div>
+                                <div class="text-sm">
+                                    <div class="text-gray-600 dark:text-gray-400">Time</div>
+                                    <div class="font-medium">57:22</div>
+                                </div>
+                                <div class="text-sm">
+                                    <div class="text-gray-600 dark:text-gray-400">Pace</div>
+                                    <div class="font-medium">4:46/km</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3 flex space-x-4">
+                            <button class="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"></path>
+                                </svg>
+                                <span>Like</span>
+                            </button>
+                            <button class="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                                </svg>
+                                <span>Comment</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card p-4 mb-4">
+                <div class="flex items-start">
+                    <div class="rounded-full bg-green-500 w-10 h-10 flex items-center justify-center text-white font-medium flex-shrink-0">
+                        T
+                    </div>
+                    <div class="ml-3 flex-1">
+                        <div class="flex justify-between">
+                            <h3 class="font-medium">Taylor</h3>
+                            <span class="text-sm text-gray-600 dark:text-gray-400">5h ago</span>
+                        </div>
+                        <p class="text-gray-700 dark:text-gray-300 mt-1">Achieved a new personal record!</p>
+                        
+                        <div class="mt-2 flex justify-between items-center p-3 bg-gray-100 dark:bg-darkgray rounded-lg">
+                            <div>
+                                <div class="font-medium">New PR: 5K Run</div>
+                                <div class="text-sm text-gray-600 dark:text-gray-400">Previous: 22:45 • New: 21:32</div>
+                            </div>
+                            <div class="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded-full text-xs font-medium">
+                                PR
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3 flex space-x-4">
+                            <button class="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"></path>
+                                </svg>
+                                <span>Like</span>
+                            </button>
+                            <button class="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary dark:hover:text-primary-light">
+                                <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                          d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                                </svg>
+                                <span>Comment</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Challenge Card -->
+            <div class="card p-4 mb-4">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="font-semibold">Active Challenges</h2>
+                    <button class="text-sm text-primary">View All</button>
+                </div>
+                <div class="bg-gray-100 dark:bg-darkgray rounded-lg p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="font-medium">Summer Running Series</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400 mt-1">Run 100km in June</div>
+                            <div class="mt-3 text-xs">
+                                <span class="font-medium">15 participants</span>
+                                <span class="mx-1">•</span>
+                                <span>43.2km completed</span>
+                            </div>
+                        </div>
+                        <div class="bg-primary text-white text-xs font-medium rounded-full px-2 py-1">
+                            Active
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="text-xs text-gray-600 dark:text-gray-400 mb-1">Your progress: 28.5km / 100km</div>
+                        <div class="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-primary rounded-full" style="width: 28.5%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Screen -->
+    <div id="profile" class="screen hidden h-full pb-20">
+        <div class="mx-auto max-w-xl p-4">
+            <div class="flex items-center mb-6">
+                <div class="mr-4">
+                    <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-medium">
+                        A
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold">Alex Johnson</h1>
+                    <p class="text-gray-600 dark:text-gray-400">Premium Member</p>
+                </div>
+            </div>
+
+            <!-- Stats Summary -->
+            <div class="card p-4 mb-6">
+                <h2 class="font-semibold mb-4">Fitness Stats</h2>
+                <div class="grid grid-cols-3 gap-4">
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">48.5</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">VO₂ Max</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">182</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">Activities</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-2xl font-bold">1,234</div>
+                        <div class="text-sm text-gray-600 dark:text-gray-400">km Total</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Sections -->
+            <div class="space-y-4">
+                <div class="card overflow-hidden">
+                    <div class="px-4 py-3 font-medium bg-gray-50 dark:bg-darkgray">
+                        Account Settings
+                    </div>
+                    <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Personal Information</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Privacy Settings</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Subscription</span>
+                            <div class="flex items-center">
+                                <span class="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 font-medium px-2 py-0.5 rounded-full mr-2">Premium</span>
+                                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                                </svg>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card overflow-hidden">
+                    <div class="px-4 py-3 font-medium bg-gray-50 dark:bg-darkgray">
+                        App Settings
+                    </div>
+                    <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Connected Devices</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <div class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Apple Health</span>
+                            <div class="relative inline-block w-12 h-6 transition duration-200 ease-in-out rounded-full bg-primary">
+                                <label for="toggle3" class="absolute left-0 w-6 h-6 mb-2 bg-white rounded-full transition-transform duration-100 ease-in-out transform translate-x-6 cursor-pointer"></label>
+                                <input type="checkbox" id="toggle3" name="toggle3" class="w-full h-full appearance-none focus:outline-none cursor-pointer" checked>
+                            </div>
+                        </div>
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Notifications</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card overflow-hidden">
+                    <div class="px-4 py-3 font-medium bg-gray-50 dark:bg-darkgray">
+                        Support
+                    </div>
+                    <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Help Center</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Report a Bug</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                        <a href="#" class="block px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 flex justify-between items-center">
+                            <span>Contact Us</span>
+                            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+
+                <button class="w-full py-3 text-red-500 font-medium mt-4">
+                    Log Out
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white dark:bg-background-dark border-t border-gray-200 dark:border-gray-800 p-2 hidden">
+        <div class="flex justify-around items-center">
+            <button id="nav-home" class="nav-item flex flex-col items-center p-2 text-primary dark:text-primary rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                </svg>
+                <span class="text-xs mt-1">Home</span>
+            </button>
+            <button id="nav-workout" class="nav-item flex flex-col items-center p-2 text-gray-500 dark:text-gray-400 rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                </svg>
+                <span class="text-xs mt-1">Workout</span>
+            </button>
+            <button id="nav-training" class="nav-item flex flex-col items-center p-2 text-gray-500 dark:text-gray-400 rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+                <span class="text-xs mt-1">Training</span>
+            </button>
+            <button id="nav-social" class="nav-item flex flex-col items-center p-2 text-gray-500 dark:text-gray-400 rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                </svg>
+                <span class="text-xs mt-1">Social</span>
+            </button>
+            <button id="nav-profile" class="nav-item flex flex-col items-center p-2 text-gray-500 dark:text-gray-400 rounded-lg">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                <span class="text-xs mt-1">Profile</span>
+            </button>
+        </div>
+    </div>
+
+</body>
+</html>
